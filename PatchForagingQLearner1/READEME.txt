@@ -1,0 +1,4 @@
+A first pass at a Q learning reinforcement learning agent to solve Mike Bukwich's patch foraging task
+
+Uses two-layered Q tables to learn structure of task, with separate arrays for patch ON and OFF conditions
+and separate axes for time and reward integration variable
