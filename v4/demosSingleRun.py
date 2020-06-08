@@ -26,10 +26,11 @@ from patchyEnvironment import PatchEnvironment
 
 env = PatchEnvironment('probabilistic',nTimestates = 50,ITI_penalty = 2,timecost = 0)
 
-agent_type = 3
+agent_type = 1
 
-sim = 1
+sim = 2
 
+# optimization within trials
 if sim == 1:
     if agent_type == 1:
         agent = Model1Agent(len(env.rewsizes),"softmax",env.nTimestates,env.rewsizes,beta = 5,lr = .5)
@@ -38,13 +39,14 @@ if sim == 1:
     elif agent_type == 3:
         agent = Model3Agent(len(env.rewsizes),"softmax",env.nTimestates,env.rewsizes,b = 1,a = 3,beta = 5,lr = .5)
 
+# optimization between trial-types
 if sim == 2:
     if agent_type == 1:
         agent = Model1Agent(len(env.rewsizes),"softmax",env.nTimestates,env.rewsizes,beta = 1.4,lr = .2)
     elif agent_type ==2:
         agent = Model2Agent(len(env.rewsizes),"softmax",env.nTimestates,env.rewsizes,beta = 1,lr = .5)
     elif agent_type == 3:
-        agent = Model3Agent(len(env.rewsizes),"softmax",env.nTimestates,env.rewsizes,b = 1,a = 3,beta = 5,lr = .5)
+        agent = Model3Agent(len(env.rewsizes),"softmax",env.nTimestates,env.rewsizes,b = 1,a = 3,beta = 5,lr = .1)
 
 rl1 = RLInterface(agent,env)
 
@@ -65,13 +67,21 @@ tt14_alt = [trialtype1 if rnd.rand() < .5 else trialtype4 for n in range(100)]
 tt14_series = [trialtype1 if n < 40 else trialtype4 for n in range(80)]
 tt14_series_alt = tt14_series + tt14_alt
 
-print(tt14_series_alt)
+# print(tt14_series_alt)
 
 if sim == 2:
-    rl1.run_trials(40,probe_specs = tt1_series + tt4_series + tt14_alt )# tt1_series + tt1_series + tt4_series + tt14_alt)
+    rl1.run_trials(40,probe_specs = tt1_series + tt4_series + tt14_alt)# tt1_series + tt1_series + tt4_series + tt14_alt)
     rl1.barcode_beh()
     rl1.show_qtable()
+
+    plt.figure()
     rl1.plot_qiti()
+    plt.axvspan(0, 19, color='r', alpha=0.5, lw=0)
+    plt.axvspan(19, 39, color='b', alpha=0.5, lw=0)
+    plt.axvspan(39, 139, color=[.5,0,.5], alpha=0.5, lw=0)
+    plt.xlabel('Trial')
+    plt.ylabel('Q Value for Leave ITI')
+    plt.title('Q Value for Leave ITI State over time')
 
 if sim == 1:
 
@@ -92,39 +102,42 @@ if sim == 1:
         qitilist.append(rl1.agent.Q[OFF][LEAVE])
         actions.append(action)
         rews.append(rew)
-        print('Action:',action,'\tRew:',rew)
+        # print('Action:',action,'\tRew:',rew)
 
     fig = plt.figure(figsize = (2 * 10 , 2 * 2))
     for step in range(len(actionForceList)):
         plt.subplot(10, 2, step+1)
         plt.subplots_adjust(hspace = 1.3)
+        if np.all(Qlist[step] == 0): # a dumb coloring thing
+            cmap = [0,0,0]
+        else:
+            cmap = None
+
         if agent_type == 1:
-            sns.heatmap(Qlist[step][0 , :, :7],cbar = False,annot = True)
+            sns.heatmap(Qlist[step][0 , :, :7],cbar = False,annot = True,center = 0,vmin =-1.,vmax = 1., cmap = cmap)
         if agent_type == 2:
-            sns.heatmap(Qlist[step][0 , :,:10],cbar = False,annot = True)
+            sns.heatmap(Qlist[step][0 , :,:10],cbar = False,annot = True,center = 0.,vmin =-1,vmax = 1,cmap = cmap)
         if agent_type == 3:
-            sns.heatmap(Qlist[step][0 , :, 150:160],cbar = False,annot = True)
+            sns.heatmap(Qlist[step][0 , :, 150:160],cbar = False,annot = True,center = 0.,vmin =-1,vmax = 1,cmap = cmap)
+
         if actions[step] == LEAVE:
-            actn = "ran"
+            actn = "LEAVE"
         else:
-            actn = "did not run"
+            actn = "STAY"
         if patchOn[step] == ON:
-            ptch = "on"
+            ptch = "ON"
         else:
-            ptch = "off"
+            ptch = "OFF"
         plt.xticks([])
         plt.yticks([])
 
-        plt.title("Mouse %s with patch %s and received %i reward" % (actn,ptch,rews[step],))
+        plt.title("%s with patch %s -> Reward = %i" % (actn,ptch,rews[step],))
     if agent_type == 3:
-        plt.suptitle('Model3 a=3 b = 1 ; Trial Rewards: [1,0,0,1,0,1,0,1,0,1,0]')
+        plt.suptitle('Integrator 3 (x = 3, y = 1) with Reward Sequence: [1,0,0,1,0,1]')
     if agent_type == 2:
-        plt.suptitle('Model2 ; Trial Rewards: [1,0,0,1,0,1,0,1,0,1,0]')
+        plt.suptitle('Integrator 2 with Reward Sequence: [1,0,0,1,0,1]')
     if agent_type == 1:
-        plt.suptitle('Model1 ; Trial Rewards: [1,0,0,1,0,1,0,1,0,1,0]')
-    plt.figure()
-    plt.plot(qitilist)
-    plt.title('Q Value for Leave ITI State over time')
+        plt.suptitle('Integrator 1 with Reward Sequence: [1,0,0,1,0,1]')
 
 
 # plt.tight_layout()

@@ -1,0 +1,10 @@
+- Performance optimizations for Q learning:
+  - Change leave, patch ON single state
+  - Add TD lambda agent
+  - Parameter search on dynamic LR, inverse temperature parameters
+  - Add non-tabular function approximation
+
+- Add BIC-Based optimization on mouse behavior
+  - Boiler plate code to run/extract behavior in Matlab using Mfit
+
+- MVT Learner from Daw, Constantino

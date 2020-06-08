@@ -1,13 +1,9 @@
-import random
 from numpy import random as rnd
 import matplotlib.pyplot as plt
 import numpy as np
-import pytz
-import datetime
-import os
-import pandas as pd
-import itertools
 import seaborn as sns
+import pandas as pd
+from scipy.ndimage.filters import gaussian_filter
 
 STAY = 0
 LEAVE = 1
@@ -51,32 +47,44 @@ class RLInterface():
 
         return action,rew,rpe,value
 
-    def run_trials(self,nTrials,epsilon_decay = 0,probe_specs = [],return_ll = False):
+    def run_trials(self,nTrials,probe_specs = [],return_ll = False):
         """
             probe_specs is a list of dictionaries with reward vector and n0 values
             ie probe_specs = [{"rews" : [1,1,1,1,1,0,0,0,0,0] , "n0" : .125},
                               {"rews" : [1,1,1,1,1,0,0,0,0,0] , "n0" : .125}]
         """
         actions = []
-        self.prts_list = []
+        # dataframe to end all datastructures
+        self.prt_df = pd.DataFrame(columns = ["rewsize","N0","rewsizeN0","PRT"])
+        self.mvt_df = pd.DataFrame(columns = ["trial","timepoint","rew","instTrue","avgEst","v_patch"])
+
         self.prts = {1:[],2:[],4:[]} # Patch residence times divided by reward size
         self.rew_locs = {1:[],2:[],4:[]} # Reward locations for heatmap visualization
-        self.prts_plus = {1:{.125:[],.25:[],.5:[]}, # Patch residence times divided by reward size and N0
-                          2:{.125:[],.25:[],.5:[]},
-                          4:{.125:[],.25:[],.5:[]}}
+
         self.rews = [] # Flat vector of reward received for efficiency visualization
         self.rpes = {1:[],2:[],4:[]} # for rpe heatmap visualization
         self.values = {1:[],2:[],4:[]} # for value heatmap visualization
         self.rews_trialed = {1:[],2:[],4:[]} # for heatmap visualization
         self.q_iti = []
+        self.q_leave = []
+
+        rewavg_window = 500
 
         # run trials with no probe trials
         if len(probe_specs) == 0:
             for iTrial in range(nTrials):
+                q_patch_list = []
+                avg_list = []
+
                 # Start with patch off
                 while self.env.state["patch"] == OFF:
                     action,rew,rpe,value = self.step()
                     self.rews.append(rew)
+                    if len(self.rews) > rewavg_window:
+                        avg_list.append(np.mean(self.rews[-rewavg_window:]))
+                    else:
+                        avg_list.append(np.mean(self.rews))
+                    q_patch_list.append(self.agent.Q[OFF][LEAVE])
 
                 # initialize trial record keeping datastructures
                 self.curr_rew = self.env.state["rewsize"]
@@ -94,18 +102,43 @@ class RLInterface():
                     curr_rpes.append(rpe)
                     curr_values.append(value)
                     self.rews.append(rew)
+                    q_patch_list.append(value)
                     curr_prt += 1
+                    if len(self.rews) > rewavg_window:
+                        avg_list.append(np.mean(self.rews[-rewavg_window:]))
+                    else:
+                        avg_list.append(np.mean(self.rews))
 
                 # record data after leaving
                 self.rews_trialed[self.curr_rew].append(curr_rew_rec)
+
                 self.rpes[self.curr_rew].append(curr_rpes)
                 self.values[self.curr_rew].append(curr_values)
                 self.prts[self.curr_rew].append(curr_prt)
-                self.prts_list.append(curr_prt)
 
-                self.prts_plus[self.curr_rew][self.curr_freq].append(curr_prt)
-                # update epsilon for egreedy
-                # self.agent.epsilon = self.agent.epsilon0 * np.e**(-iTrial/epsilon_decay) + self.agent.baseline_epsilon
+                # dataframe structure
+                self.prt_df.at[iTrial] = [self.curr_rew,self.curr_freq,self.curr_rew+self.curr_freq,curr_prt]
+
+                # dataframe for mvt measures
+                trial_list = [iTrial for i in range(len(q_patch_list))]
+                timepoint_list = [i for i in range(len(q_patch_list))]
+                rews = self.rews[-len(q_patch_list):]
+                true_inst = self.env.pdfs[self.curr_freq][:len(q_patch_list)]
+                true_inst = [x * self.curr_rew - self.env.timecost for x in true_inst]
+                curr_mvt_array = np.array([trial_list,timepoint_list,rews,true_inst,avg_list,q_patch_list]).T
+                curr_mvt_df = pd.DataFrame(curr_mvt_array,columns = ["trial","timepoint","rew","instTrue","avgEst","v_patch"])
+                self.mvt_df = self.mvt_df.append(curr_mvt_df)
+
+                # update dynamic values
+                if self.agent.dynamic_beta == True:
+                    self.agent.beta = (self.agent.beta_final + (self.agent.beta0 - self.agent.beta_final) *
+                                                            np.exp(-1. * iTrial / self.agent.beta_decay))
+                if self.agent.dynamic_lr == True:
+                    self.agent.lr = (self.agent.lr_final + (self.agent.lr0 - self.agent.lr_final) *
+                                                            np.exp(-1. * iTrial / self.agent.lr_decay))
+                self.q_iti.append(self.agent.Q[OFF][LEAVE])
+                self.q_leave.append(self.agent.Q[ON][0,LEAVE,0])
+
         # behave under ste trial conditions
         elif len(probe_specs) > 0:
             for iTrial in range(len(probe_specs)):
@@ -125,8 +158,6 @@ class RLInterface():
 
                 while self.env.state["patch"] == ON: # now behave on patch
                     action,rew,rpe,value = self.step(probe_trial = probe_specs[iTrial])
-                    if self.env.state["patch"] == ON:
-                        print(curr_prt - (self.env.state["t"]-1))
                     curr_rew_rec.append(rew)
                     actions.append(action)
                     curr_rpes.append(rpe)
@@ -134,18 +165,13 @@ class RLInterface():
                     self.rews.append(rew)
                     curr_prt += 1
 
-
-                print(curr_prt)
                 # record data after leaving
                 self.rews_trialed[self.curr_rew].append(curr_rew_rec)
                 self.rpes[self.curr_rew].append(curr_rpes)
                 self.values[self.curr_rew].append(curr_values)
                 self.prts[self.curr_rew].append(curr_prt)
-                self.prts_list.append(curr_prt)
-                self.prts_plus[self.curr_rew][self.curr_freq].append(curr_prt)
                 self.q_iti.append(self.agent.Q[OFF][LEAVE])
-                # update epsilon for egreedy
-                # self.agent.epsilon = self.agent.epsilon0 * np.e**(-iTrial/epsilon_decay) + self.agent.baseline_epsilon
+                self.q_leave.append(self.agent.Q[ON][0,LEAVE,0])
 
     def show_qtable(self):
         """
@@ -157,24 +183,23 @@ class RLInterface():
             plt.subplot(1,2,1)
             plt.title('Patch ON STAY Q table')
             sns.heatmap(self.agent.Q[ON][:,STAY,:10])
-            plt.subplot(1,2,2)
-            plt.title('Patch ON LEAVE Q table')
-            sns.heatmap(self.agent.Q[ON][:,LEAVE,:10])
         elif self.agent.model == "Model2":
             plt.subplot(1,2,1)
             plt.title('Patch ON STAY Q table')
             sns.heatmap(self.agent.Q[ON][:,STAY,:7])
-            plt.subplot(1,2,2)
-            plt.title('Patch ON LEAVE Q table')
-            sns.heatmap(self.agent.Q[ON][:,LEAVE,:7])
         elif self.agent.model == "Model3":
             plt.subplot(1,2,1)
             plt.title('Patch ON STAY Q table')
             sns.heatmap(self.agent.Q[ON][:,STAY,145:165])
-            plt.subplot(1,2,2)
-            plt.title('Patch ON LEAVE Q table')
-            sns.heatmap(self.agent.Q[ON][:,LEAVE,145:165])
+        sns.set()
+        plt.subplot(1,2,2)
+        plt.title('Environmental Value Estimation Over Time')
+        print("here")
+        plt.plot(gaussian_filter(self.q_iti,50),label = "Q[PatchOFF,LEAVE]")
+        plt.plot(gaussian_filter(self.q_leave,50),label = "Q[PatchON,LEAVE]")
+        plt.legend()
         plt.suptitle('%s Q Table'%(self.agent.model))
+        sns.reset_orig()
 
     def plot_percent_stay(self,decisions):
         """
@@ -186,35 +211,34 @@ class RLInterface():
         plt.ylim([0,1])
         plt.plot(percent)
 
-    def plot_prts(self,resolution):
+    def plot_prts(self,sd_filter):
         """
             Visualize smoothed PRTs over learning, separated by patch type
             Use this to determine around where behavior stabilizes
         """
         plt.figure()
         for patch in self.prts.keys():
-            coords = list(range(0,len(self.prts[patch])-resolution,resolution))
-            smoothened = [np.mean(self.prts[patch][coords[i]:coords[i+1]]) for i in range(len(coords)-1)]
-            plt.plot(smoothened,label = str(str(patch) + ' uL'))
+            prts = self.prt_df[self.prt_df["rewsize"] == patch]["PRT"].astype('float64')
+            smooth_prts = gaussian_filter(prts,sd_filter)
+            # print(smooth_prts)
+            # smooth_prts = gaussian_filter(self.prts[patch],sd_filter)
+            plt.plot(smooth_prts,label = str(str(patch) + ' uL'))
         plt.legend()
         plt.ylabel('Avg Patch Residence Time')
         plt.xlabel('Time over training')
         plt.title('Patch-Separated Evolution of PRTs over Training')
 
-    def plot_rewrate(self,resolution,agent_type,irange = []):
+    def plot_rewrate(self,sd_filter,agent_type,irange = []):
         """
             Visualize smoothed rewrate over course of learning
             Use this to determine around where behavior stabilizes and how efficient the algorithm is
         """
         plt.figure()
-        # print(irange)
-        if len(irange) == 0:
-            coords = list(range(0,len(self.rews)-resolution,resolution))
+        if len(irange) == 2:
+            smooth_rews = gaussian_filter(self.rews[irange[0],irange[1]],sd_filter)
         else:
-            coords = list(range(irange[0],irange[1],resolution))
-            # print(coords)
-        smoothened = [np.mean(self.rews[coords[i]:coords[i+1]]) for i in range(len(coords)-1)]
-        plt.plot(smoothened)
+            smooth_rews = gaussian_filter(self.rews,sd_filter)
+        plt.plot(smooth_rews)
         plt.ylabel('Avg Rew/sec')
         plt.ylim([0,.6])
         plt.xlabel('Time over training')
@@ -231,18 +255,8 @@ class RLInterface():
             Visualize proportion of stay decisions agent makes on patch, separated by patch type
             Input start parameter, where we start analysis based on convergence after plot_prts analysis
         """
-        data = []
-        lengths = []
-        for patch in self.prts.keys():
-            print(patch)
-            data.append(self.prts[patch])
-            lengths.append(len(np.array(self.prts[patch])))
-        min_len = min(lengths)
-        array_prts = np.array([data[i][start:min_len] for i in range(len(data))]).T
-        self.patch_df = pd.DataFrame(array_prts,columns = ['Sm','Md','Lg'])
-
         plt.figure()
-        ax = sns.barplot(data = self.patch_df,palette = [(0,0,0),(.5,1,1),(0,0,1)],edgecolor=".2")
+        sns.barplot(x = "rewsize",y = "PRT",data = self.prt_df[start:],palette = [(0,0,0),(.5,1,1),(0,0,1)],edgecolor=".2")
         plt.xlabel('Rew Size (uL)')
         plt.ylabel('Mean PRT (sec)')
         plt.title('PRT by Reward Size')
@@ -252,48 +266,22 @@ class RLInterface():
             Input start parameter, where we start analysis based on convergence after plot_prts analysis
             Basically a more detailed visualization of the prt_bars
         """
-        data = []
-        lengths = []
-        for patch in self.prts.keys():
-            data.append(self.prts[patch])
-            lengths.append(len(np.array(self.prts[patch])))
-        min_len = min(lengths)
-        array_prts = np.array([data[i][start:min_len] for i in range(len(data))]).T
-        array_prts = array_prts + rnd.normal(0,.3,array_prts.shape)
-        self.patch_df = pd.DataFrame(array_prts,columns = ['Sm','Md','Lg'])
-
-        plt.figure(figsize = [5,15])
-        plt.subplot(3,1,1)
-        plt.title('1 uL Rewsize')
-        sns.distplot(self.patch_df["Sm"], color=(0,0,0), hist=False, rug=False)
-        plt.subplot(3,1,2)
-        plt.title('2 uL Rewsize')
-        sns.distplot(self.patch_df["Md"], color=(.5,1,1), hist=False, rug=False)
-        plt.subplot(3,1,3)
-        plt.title('4 uL Rewsize')
-        sns.distplot(self.patch_df["Lg"], color = (0,0,1),hist=False, rug=False)
-
-        # plt.xlabel('Rew Size (uL)')
-        plt.suptitle('PRT Distribution by Reward Size')
+        plt.figure()
+        sns.violinplot(x = "rewsize",y = "PRT",data = self.prt_df[start:].astype('float64'),palette = [(0,0,0),(.5,1,1),(0,0,1)])
+        plt.xlabel('Reward Size')
+        plt.ylabel('PRT')
+        plt.title('PRT distribution by reward size')
 
     def prt_plus_bars(self,start):
         """
             Visualize mean PRT separated by reward size and frequency
             Input start parameter, where we start analysis based on convergence after plot_prts analysis
         """
-        data = []
-        lengths = []
-        for rew_size in self.prts_plus.keys():
-            for rew_freq in self.prts_plus[rew_size].keys():
-                data.append(self.prts_plus[rew_size][rew_freq])
-                lengths.append(len(self.prts_plus[rew_size][rew_freq]))
-        min_len = min(lengths)
-        array_prts = np.array([data[i][start:min_len] for i in range(len(data))]).T
-        self.patch_plus_df = pd.DataFrame(array_prts,columns = ['1uL Lo','1uL Md','1uL Hi','2uL Lo','2uL Md','2uL Hi','4uL Lo','4uL Md','4uL Hi'])
-
+        sizeN0 = ['1uL Lo','1uL Md','1uL Hi','2uL Lo','2uL Md','2uL Hi','4uL Lo','4uL Md','4uL Hi']
         colors = [(.5,.5,.5),(.3,.3,.3),(0,0,0),(.9,1,1),(.7,1,1),(.5,1,1),(.5,.5,1),(.3,.3,1),(0,0,1)]
         plt.figure()
-        ax = sns.barplot(data = self.patch_plus_df,palette = colors,edgecolor=".2")
+        sns.barplot(x = "rewsizeN0",y = "PRT",data = self.prt_df[start:],palette = colors,edgecolor=".2")
+        plt.xticks(range(len(sizeN0)),sizeN0)
         plt.xlabel('Rew Size (uL)')
         plt.ylabel('Mean PRT (sec)')
         plt.title('PRT by Reward Size and Frequency')
@@ -307,10 +295,6 @@ class RLInterface():
 
         self.timecourses = dict()
         for patch in data.keys(): # could make this a double list comp but i still hold some mercy in my heart
-#             for prt in data[patch]:
-#                 print(prt)
-            if max(data[patch]) > num_timesteps:
-                print(max(data[patch]))
             self.timecourses[patch] = np.array([list(np.ones(prt)) + list(np.zeros(num_timesteps-prt)) for prt in data[patch]])
 
     def plot_survival(self):
@@ -434,7 +418,7 @@ class RLInterface():
         plt.suptitle('Value Heatmap')
 
     def barcode_beh(self):
-        print(self.prts)
+        # print(self.prts)
         for patch in self.prts.keys():
             these_prts = self.prts[patch]
             if len(these_prts) > 0:
@@ -448,7 +432,7 @@ class RLInterface():
 
     def plot_qiti(self):
         plt.figure()
-        plt.plot(self.q_iti)
+        plt.plot(self.q_iti,color = [0,0,0])
         plt.title('ITI Leave Q Value over trials')
 
 

@@ -22,6 +22,7 @@ ITI_state = {"patch" : OFF , "rewindex" : -1}
 def cdf(x,N0):
     A = -.125
     return 1+ N0 * 1/A * np.exp(A*x) - N0/A
+    
 def pdf(this_cdf):
     this_pdf = []
     for t in range(1,len(this_cdf)):
@@ -50,7 +51,7 @@ class PatchEnvironment():
         self.rew_system = rew_system
         self.nTimestates = nTimestates
         self.ITI_penalty = ITI_penalty
-        self.N0 = [.5, .25, .125]
+        self.N0 = [.5, .25, .125] # [.5, .25, .125]
         self.pdfs = generate_pdfs(self.N0)
         self.rewsizes = [1, 2, 4]
         self.state = ITI_state

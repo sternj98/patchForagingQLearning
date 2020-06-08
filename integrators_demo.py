@@ -33,7 +33,9 @@ def m5(env_state):
     t = env_state["t"]
     return a * np.sum(env_state["rews"][:(t)])/env_state["rewsize"] + env_state["rews"][t] * x - b * t
 
-state = {"rews" : [1,0,0,0,1,0,0,1,0,1,0,1,0] , "t" : 0,"rewsize":1}
+# state = {"rews" : [1,0,0,0,1,0,0,1,0,1,0,1,0] , "t" : 0,"rewsize":1}
+
+state = {"rews" : [1,0,1,0,1,0,0,1] , "t" : 0,"rewsize":1}
 
 m1list = []
 m2list = []
@@ -61,10 +63,17 @@ plt.show()
 
 plt.figure()
 # plt.plot(np.array(m1list) / sum(m1list))
-plt.title('Standardized Reward Integration for Sequence: [1,0,0,0,1,0,0,1,0,1,0,1,0]')
-plt.plot(-np.array(m2list) / np.std(m2list),label = "Memoryless Integrator")
-plt.plot(np.array(m3list) / np.std(m3list),label = "Basic Integrator (a=3, b=1)")
-plt.plot(np.array(m4list) / np.std(m4list),label = "Bayesian Estimation of N0 (a0=1, b0=4)")
-plt.plot(np.array(m5list) / np.std(m5list),label = "Recency-Biased Integrator (a=1, b=2, x=3)")
+# plt.title('Standardized Reward Integration for Sequence: [1,0,0,0,1,0,0,1,0,1,0,1,0]')
+# plt.plot(np.array(m1list) / np.std(m1list),label = "Time")
+# plt.plot(-np.array(m2list) / np.std(m2list),label = "Memoryless Integrator")
+# plt.plot(np.array(m3list) / np.std(m3list),label = "Basic Integrator (a=3, b=1)")
+# plt.plot(np.array(m4list) / np.std(m4list),label = "Bayesian Estimation of N0 (a0=1, b0=4)")
+# plt.plot(np.array(m5list) / np.std(m5list),label = "Recency-Biased Integrator (a=1, b=2, x=3)")
+plt.title('Reward Integrator Values for a trial with rewards at 0, 2, 4, and 7 seconds')
+plt.plot(np.array(m1list),label = "Model 1: Time")
+plt.plot(np.array(m2list),label = "Model 2: Time since last reward")
+plt.plot(-np.array(m3list) + 3,label = "Model 3: Increase with time and dip with reward")
+plt.xlabel('Time')
+plt.ylabel('Reward Integrator Value')
 plt.legend()
 plt.show()
