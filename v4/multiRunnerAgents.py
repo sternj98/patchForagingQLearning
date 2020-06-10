@@ -63,6 +63,7 @@ bar = progressbar.ProgressBar(widgets=widgets,maxval=nRepeats).start()
 if random_control == True:
     for i in range(nRepeats):
         bar.update(i)
+        # this is just an egreedy agent w/ ep = 1
         agent = Model3Agent(len(env.rewsizes),"egreedy",env.nTimestates,env.rewsizes,epsilon = 1,b = 1,a = 3,beta = 1.5)
         rl = RLInterface(agent,env)
         rl.run_trials(nTrials)

@@ -90,10 +90,12 @@ class MVT_agentDoubleDelta:
 
         Estimate instantaneous rewrate on patch with delta rule
     """
-    def __init__(self,c = 1.,lr = .001,tau = 1., beta = 2.0,kappa = 1.):
+    # LR
+    def __init__(self,ITI_penalty,c = 0.,lr = .001,lrInst = .25, beta = 2.0,kappa = .8):
         # parameters
+        self.ITI_penalty = ITI_penalty # just to monitor where we are
         self.lr = lr # LR for env rewrate
-        self.tau = tau # LR for inst rewrate
+        self.lrInst = lrInst # LR for inst rewrate
         self.beta = beta # inverse temperature
         self.c = c # stay bias term, should be able to drift over time
         self.kappa = kappa
@@ -124,18 +126,18 @@ class MVT_agentDoubleDelta:
             Update avg env rew (rho) according to delta rule
         """
         # initialize as the first reward received, then do a delta rule
-        # update recent reward memory
-        if rew < 0:
+        # update recent reward memory only if on patch
+        if rew <= -self.ITI_penalty:
             self.inst = self.inst # don't update in ITI
             self.newTrial = True
             self.inst_list.append(self.inst)
         elif self.newTrial == True:
-            self.inst = rew # initialize to reward received in beginning of trial
             self.newTrial = False
+            self.inst = rew # initialize to reward received in beginning of trial
             self.inst_list.append(self.inst)
         else:
-            delta = rew - self.inst # use delta rule to update if on patch
-            self.inst = (1 - self.tau) * self.inst + self.tau * delta
+            delta = rew - self.inst
+            self.inst = (1 - self.lrInst) * self.inst + self.lrInst * delta  # update using delta rule
             self.inst_list.append(self.inst)
 
         # update env rewrate estimation

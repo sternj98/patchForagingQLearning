@@ -2,12 +2,6 @@ import random
 from numpy import random as rnd
 import matplotlib.pyplot as plt
 import numpy as np
-import pytz
-import datetime
-import os
-import pandas as pd
-import itertools
-import seaborn as sns
 
 STAY = 0
 LEAVE = 1
@@ -24,9 +18,9 @@ def leaveOneQ(rewsize_index,action,rew_int):
     else:
         return (rewsize_index,STAY,rew_int)
 
-class Agent:
+class TabQAgent:
     """
-    General class for Q learning agents
+    General class for Tabular Q learning agents
     """
     def __init__(self,nRewSizes,integration_dim,decision_type,rewsizes,
                  lmda = 0.2, # eligibility trace parameter
@@ -150,7 +144,7 @@ class Agent:
 
         return rpe
 
-class Model1Agent(Agent):
+class Model1Agent(TabQAgent):
     """
         rew integration is a function of time
     """
@@ -166,7 +160,7 @@ class Model1Agent(Agent):
         else:
             return -1
 
-class Model2Agent(Agent):
+class Model2Agent(TabQAgent):
     """
         rew integration is a function of time since previous reward, reward size
     """
@@ -185,7 +179,7 @@ class Model2Agent(Agent):
         else:
             return -1
 
-class Model3Agent(Agent):
+class Model3Agent(TabQAgent):
     """
         rew integration is a function of total rewards received over time, reward size
     """
@@ -210,7 +204,7 @@ class Model3Agent(Agent):
         else:
             return -1
 
-class OmniscientAgent(Agent):
+class OmniscientAgent(TabQAgent):
     """
         rew integration is a function of total rewards received over time, reward size
     """
