@@ -1,2 +1,2 @@
 # patchForagingQLearning
-Q-learning in patchy environments
+Q-learning in patchy environments... and more!
