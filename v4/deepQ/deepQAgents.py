@@ -23,14 +23,15 @@ class DQN(nn.Module):
 
         self.ff = nn.Sequential(
             nn.Linear(self.input_dim, 64),
-            nn.LeakyReLU(),
+            nn.Tanh(),
             nn.Linear(64, 32), # single hidden layer can maybe improve approx
-            nn.LeakyReLU(),
+            nn.Tanh(),
             nn.Linear(32, self.output_dim),
         )
 
     def forward(self, state):
         state = torch.FloatTensor(state).float()
+        # print(state)
         qvals = self.ff(state)
         return qvals
 
@@ -66,16 +67,16 @@ class Buffer():
 class DeepQAgent():
     """
         General class for RL agents that use FF nns to est. Q(s,a)
-        the envstate: [patchON{1/-1},rewsize/maxrewsize,intValue/maxIntValue]
+        the envstate: [patchOn,patchOff,rewsize/maxrewsize,intValue/maxIntValue]
         # add softmax
     """
     def __init__(self,decision_type):
-        envstate_dim = 3
+        envstate_dim = 4
         action_dim = 2
         self.policy_net = DQN(envstate_dim, action_dim) # network used to calculate policy
         self.target_net = DQN(envstate_dim, action_dim) # network used to calculate target
         self.target_net.eval() # throw that baby in eval mode because we don't care about its gradients
-        self.target_update = 10**4 # this works really poorly
+        self.target_update = 50**2 # this works really poorly
         self.replay_buffer = Buffer() # replay buffer implemented as a list
         self.decision_type = decision_type
         # dynamic params for egreedy
@@ -84,17 +85,17 @@ class DeepQAgent():
         self.eps_decay = 300
         self.epsilon = self.eps_start
         # dynamic params for softmax
-        self.beta0 = .5
-        self.beta_final = 1.5
+        self.beta0 = .25
+        self.beta_final = 1.0
         self.beta_decay = 700
         self.beta = self.beta0
 
-        self.gamma = 0.99 # discount
+        self.gamma = 0.7 # discount
 
         # self.optimizer = torch.optim.SGD(self.policy_net.parameters(),lr=0.01, momentum=0.9)
-#         self.optimizer = torch.optim.RMSprop(self.policy_net.parameters())
-        self.optimizer = torch.optim.Adam(self.policy_net.parameters(),lr = 0.001)
-        self.huber_loss = F.smooth_l1_loss
+        # self.optimizer = torch.optim.RMSprop(self.policy_net.parameters(),lr = 0.0005)
+        self.optimizer = torch.optim.Adam(self.policy_net.parameters(),lr = 0.00005)
+        self.huber_loss = F.smooth_l1_loss # nn.L1Loss(reduction = "mean")
 
     def select_action(self,state):
         # state = torch.FloatTensor(state).float()
@@ -158,9 +159,9 @@ class DeepModel1Agent(DeepQAgent):
 
     def integrate(self,env_state):
         if env_state["patch"] == ON:
-            return [1, env_state["rewsize"]/self.maxRewsize,env_state["t"] / self.nTimestates] # normalize
+            return [1, 0, env_state["rewsize"],env_state["t"] / self.nTimestates] # normalize
         else:
-            return [-1,-1,-1]
+            return [0,1,0,0]
 
 class DeepModel2Agent(DeepQAgent):
     """
@@ -175,9 +176,9 @@ class DeepModel2Agent(DeepQAgent):
     def integrate(self,env_state):
         if env_state["patch"] == ON:
             time_since = list(reversed(env_state["rews"][:(env_state["t"]+1)])).index(env_state["rewsize"])
-            return [1, env_state["rewsize"]/self.maxRewsize, time_since / self.nTimestates] #
+            return [1, 0,env_state["rewsize"]/self.maxRewsize, time_since / self.nTimestates] #
         else:
-            return [-1,-1,-1]
+            return [0,1,0,0]
 
 class DeepModel3Agent(DeepQAgent):
     """
@@ -196,8 +197,8 @@ class DeepModel3Agent(DeepQAgent):
             t = env_state["t"]
             nRews = sum(env_state["rews"][:(t+1)])/env_state["rewsize"]
             rew_int = self.a * nRews - self.b * t
-            return [1, env_state["rewsize"]/self.maxRewsize, rew_int / self.intNorm]
+            return [1,0,env_state["rewsize"]/self.maxRewsize, rew_int / self.intNorm]
         else:
-            return [-1,-1,-1]
+            return [0,1,0,0]
 
 # here add model 4, 5, and Jan's inference model

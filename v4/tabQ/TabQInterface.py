@@ -47,7 +47,7 @@ class RLInterface():
 
         return action,rew,rpe,value
 
-    def run_trials(self,nTrials,probe_specs = [],return_ll = False):
+    def run_trials(self,nTrials,probe_specs = [],probe_actions = [],return_ll = False):
         """
             probe_specs is a list of dictionaries with reward vector and n0 values
             ie probe_specs = [{"rews" : [1,1,1,1,1,0,0,0,0,0] , "n0" : .125},
@@ -70,108 +70,82 @@ class RLInterface():
 
         rewavg_window = 500
 
-        # run trials with no probe trials
-        if len(probe_specs) == 0:
-            for iTrial in range(nTrials):
-                q_patch_list = []
-                avg_list = []
+        for iTrial in range(nTrials):
+            q_patch_list = []
+            avg_list = []
 
-                # Start with patch off
-                while self.env.state["patch"] == OFF:
+            # Start with patch off
+            stepCounter = 0
+            while self.env.state["patch"] == OFF:
+                if len(probe_specs) == 0:
                     action,rew,rpe,value = self.step()
-                    self.rews.append(rew)
-                    if len(self.rews) > rewavg_window:
-                        avg_list.append(np.mean(self.rews[-rewavg_window:]))
-                    else:
-                        avg_list.append(np.mean(self.rews))
-                    q_patch_list.append(self.agent.Q[OFF][LEAVE])
+                else:
+                    action,rew,rpe,value = self.step(probe_trial = probe_specs[iTrial],probe_action = probe_action[iTrial][stepCounter])
+                    stepCounter += 1
+                self.rews.append(rew)
+                if len(self.rews) > rewavg_window:
+                    avg_list.append(np.mean(self.rews[-rewavg_window:]))
+                else:
+                    avg_list.append(np.mean(self.rews))
+                q_patch_list.append(self.agent.Q[OFF][LEAVE])
 
-                # initialize trial record keeping datastructures
-                self.curr_rew = self.env.state["rewsize"]
-                self.curr_freq = self.env.state["n0"]
-                self.rew_locs[self.curr_rew].append(self.env.state["rews"])
-                curr_prt = 0
-                curr_rpes = []
-                curr_rew_rec = []
-                curr_values = []
+            # initialize trial record keeping datastructures
+            self.curr_rew = self.env.state["rewsize"]
+            self.curr_freq = self.env.state["n0"]
+            self.rew_locs[self.curr_rew].append(self.env.state["rews"])
+            curr_prt = 0
+            curr_rpes = []
+            curr_rew_rec = []
+            curr_values = []
 
-                while self.env.state["patch"] == ON: # now behave on patch
+            stepCounter = 0
+            while self.env.state["patch"] == ON: # now behave on patch
+                if len(probe_specs) == 0:
                     action,rew,rpe,value = self.step()
-                    curr_rew_rec.append(rew)
-                    actions.append(action)
-                    curr_rpes.append(rpe)
-                    curr_values.append(value)
-                    self.rews.append(rew)
-                    q_patch_list.append(value)
-                    curr_prt += 1
-                    if len(self.rews) > rewavg_window:
-                        avg_list.append(np.mean(self.rews[-rewavg_window:]))
-                    else:
-                        avg_list.append(np.mean(self.rews))
+                else:
+                    action,rew,rpe,value = self.step(probe_trial = probe_specs[iTrial],probe_action = probe_action[iTrial][stepCounter])
+                    stepCounter += 1
+                curr_rew_rec.append(rew)
+                actions.append(action)
+                curr_rpes.append(rpe)
+                curr_values.append(value)
+                self.rews.append(rew)
+                q_patch_list.append(value)
+                curr_prt += 1
+                if len(self.rews) > rewavg_window:
+                    avg_list.append(np.mean(self.rews[-rewavg_window:]))
+                else:
+                    avg_list.append(np.mean(self.rews))
 
-                # record data after leaving
-                self.rews_trialed[self.curr_rew].append(curr_rew_rec)
+            # record data after leaving
+            self.rews_trialed[self.curr_rew].append(curr_rew_rec)
 
-                self.rpes[self.curr_rew].append(curr_rpes)
-                self.values[self.curr_rew].append(curr_values)
-                self.prts[self.curr_rew].append(curr_prt)
+            self.rpes[self.curr_rew].append(curr_rpes)
+            self.values[self.curr_rew].append(curr_values)
+            self.prts[self.curr_rew].append(curr_prt)
 
-                # dataframe structure
-                self.prt_df.at[iTrial] = [self.curr_rew,self.curr_freq,self.curr_rew+self.curr_freq,curr_prt]
+            # dataframe structure
+            self.prt_df.at[iTrial] = [self.curr_rew,self.curr_freq,self.curr_rew+self.curr_freq,curr_prt]
 
-                # dataframe for mvt measures
-                trial_list = [iTrial for i in range(len(q_patch_list))]
-                timepoint_list = [i for i in range(len(q_patch_list))]
-                rews = self.rews[-len(q_patch_list):]
-                true_inst = self.env.pdfs[self.curr_freq][:len(q_patch_list)]
-                true_inst = [x * self.curr_rew - self.env.timecost for x in true_inst]
-                curr_mvt_array = np.array([trial_list,timepoint_list,rews,true_inst,avg_list,q_patch_list]).T
-                curr_mvt_df = pd.DataFrame(curr_mvt_array,columns = ["trial","timepoint","rew","instTrue","avgEst","v_patch"])
-                self.mvt_df = self.mvt_df.append(curr_mvt_df)
+            # dataframe for mvt measures
+            trial_list = [iTrial for i in range(len(q_patch_list))]
+            timepoint_list = [i for i in range(len(q_patch_list))]
+            rews = self.rews[-len(q_patch_list):]
+            true_inst = self.env.pdfs[self.curr_freq][:len(q_patch_list)]
+            true_inst = [x * self.curr_rew - self.env.timecost for x in true_inst]
+            curr_mvt_array = np.array([trial_list,timepoint_list,rews,true_inst,avg_list,q_patch_list]).T
+            curr_mvt_df = pd.DataFrame(curr_mvt_array,columns = ["trial","timepoint","rew","instTrue","avgEst","v_patch"])
+            self.mvt_df = self.mvt_df.append(curr_mvt_df)
 
-                # update dynamic values
-                if self.agent.dynamic_beta == True:
-                    self.agent.beta = (self.agent.beta_final + (self.agent.beta0 - self.agent.beta_final) *
-                                                            np.exp(-1. * iTrial / self.agent.beta_decay))
-                if self.agent.dynamic_lr == True:
-                    self.agent.lr = (self.agent.lr_final + (self.agent.lr0 - self.agent.lr_final) *
-                                                            np.exp(-1. * iTrial / self.agent.lr_decay))
-                self.q_iti.append(self.agent.Q[OFF][LEAVE])
-                self.q_leave.append(self.agent.Q[ON][0,LEAVE,0])
-
-        # behave under ste trial conditions
-        elif len(probe_specs) > 0:
-            for iTrial in range(len(probe_specs)):
-                # Start with patch off
-                while self.env.state["patch"] == OFF:
-                    action,rew,rpe,value = self.step(probe_trial = probe_specs[iTrial])
-                    self.rews.append(rew)
-
-                # initialize trial record keeping datastructures
-                self.curr_rew = self.env.state["rewsize"]
-                self.curr_freq = self.env.state["n0"]
-                self.rew_locs[self.curr_rew].append(self.env.state["rews"])
-                curr_prt = 0
-                curr_rpes = []
-                curr_rew_rec = []
-                curr_values = []
-
-                while self.env.state["patch"] == ON: # now behave on patch
-                    action,rew,rpe,value = self.step(probe_trial = probe_specs[iTrial])
-                    curr_rew_rec.append(rew)
-                    actions.append(action)
-                    curr_rpes.append(rpe)
-                    curr_values.append(value)
-                    self.rews.append(rew)
-                    curr_prt += 1
-
-                # record data after leaving
-                self.rews_trialed[self.curr_rew].append(curr_rew_rec)
-                self.rpes[self.curr_rew].append(curr_rpes)
-                self.values[self.curr_rew].append(curr_values)
-                self.prts[self.curr_rew].append(curr_prt)
-                self.q_iti.append(self.agent.Q[OFF][LEAVE])
-                self.q_leave.append(self.agent.Q[ON][0,LEAVE,0])
+            # update dynamic values
+            if self.agent.dynamic_beta == True:
+                self.agent.beta = (self.agent.beta_final + (self.agent.beta0 - self.agent.beta_final) *
+                                                        np.exp(-1. * iTrial / self.agent.beta_decay))
+            if self.agent.dynamic_lr == True:
+                self.agent.lr = (self.agent.lr_final + (self.agent.lr0 - self.agent.lr_final) *
+                                                        np.exp(-1. * iTrial / self.agent.lr_decay))
+            self.q_iti.append(self.agent.Q[OFF][LEAVE])
+            self.q_leave.append(self.agent.Q[ON][0,LEAVE,0])
 
     def show_qtable(self):
         """

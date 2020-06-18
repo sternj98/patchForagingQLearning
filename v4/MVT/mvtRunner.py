@@ -10,6 +10,7 @@ from performancePlots import mvt_plot,plot_prts,plot_rewrate,prt_bars,prt_hist,p
 # run RL interface
 env = PatchEnvironment('probabilistic',nTimestates = 50,ITI_penalty = 2,timecost = .2)
 
+# agent = MVT_agentDoubleDelta(env.ITI_penalty)
 agent = MVT_agentDoubleDelta(env.ITI_penalty)
 
 nTrials = int(sys.argv[1])

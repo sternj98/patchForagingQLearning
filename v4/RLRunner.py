@@ -1,7 +1,9 @@
 import sys
+sys.path.insert(1,'./tabQ')
+sys.path.insert(1,'./deepQ')
 from matplotlib import pyplot as plt
 # custom imports
-from RLInterface import RLInterface
+from TabQInterface import RLInterface
 from deepQInterface import DeepRLInterface
 from tabQAgents import Model1Agent,Model2Agent,Model3Agent,OmniscientAgent
 from deepQAgents import DeepModel1Agent,DeepModel2Agent,DeepModel3Agent
@@ -44,9 +46,9 @@ else:
 rl.run_trials(nTrials)
 
 # --------- visualization --------- #
-rl.show_qtable()
+# rl.show_qtable()
 
-vis_start = 800
+vis_start = min(14500,nTrials-400)
 filter_sd = 50
 
 plot_prts(rl,filter_sd)
@@ -63,9 +65,13 @@ prt_plus_bars(rl,vis_start)
 mk_timecourse(rl)
 plot_survival(rl)
 
-mvt_plot(rl.mvt_df,range(900,910),"Q")
-
 if agent_type[:4] == 'Deep':
     rl.plot_loss()
+# plt.show()
+
+if agent_type[:4] == 'Deep':
+    mvt_plot(rl.mvt_df,range(vis_start-10,vis_start),"Q",deep = True)
+else:
+    mvt_plot(rl.mvt_df,range(vis_start-10,vis_start),"Q")
 
 plt.show()

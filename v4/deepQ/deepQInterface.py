@@ -21,6 +21,7 @@ class DeepRLInterface():
         self.agent = agent
         self.env = environment
         self.batch_size = 50
+        self.maxRew = 4
 
     def step(self,probe_trial = {},probe_action = -1):
         env_state = self.env.state.copy()
@@ -31,7 +32,7 @@ class DeepRLInterface():
         else:
             action = probe_action
 
-        rew = self.env.execute_action(action,probe_trial = probe_trial) # execute agent action into the environment
+        rew = self.env.execute_action(action,probe_trial = probe_trial) / self.maxRew # execute agent action into the environment
         new_env_state = self.env.state.copy()
         new_int_state = self.agent.integrate(new_env_state) # internalize new env state
 
@@ -97,7 +98,7 @@ class DeepRLInterface():
                 else:
                     avg_list.append(np.mean(self.rews))
 
-                q_patch_list.append(value)
+                q_patch_list.append(float(value.detach().numpy()))
 
             # initialize trial record keeping datastructures
             self.curr_rew = self.env.state["rewsize"]
@@ -117,9 +118,9 @@ class DeepRLInterface():
                 curr_rew_rec.append(rew)
                 actions.append(action)
                 curr_rpes.append(rpe)
-                curr_values.append(value)
+                curr_values.append(float(value.detach().numpy()))
                 self.rews.append(rew)
-                q_patch_list.append(value)
+                q_patch_list.append(float(value.detach().numpy()))
                 curr_prt += 1
                 if len(self.rews) > rewavg_window:
                     avg_list.append(np.mean(self.rews[-rewavg_window:]))
@@ -152,7 +153,7 @@ class DeepRLInterface():
             # curr_mvt_df = pd.DataFrame(curr_mvt_array,columns = ["trial","timepoint","rew","instTrue","avgEst","v_patch"])
             self.mvt_df = self.mvt_df.append(curr_mvt_df)
 
-            self.q_iti.append(float(self.agent.policy_net([-1,-1,-1])[LEAVE].detach().numpy()))
+            self.q_iti.append(float(self.agent.policy_net([0,1,0,0])[LEAVE].detach().numpy()))
 
             # # update dynamic values
             # if self.agent.dynamic_beta == True:

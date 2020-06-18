@@ -186,7 +186,7 @@ def plot_prt_slopes(prt_df,rollover = 2):
     rewsizes = np.sort(prt_df["rewsize"].unique())
     trials = np.sort(prt_df["trial"].unique())
 
-    print(agents)
+    # print(agents)
 
     # iterate over agents
     for agent in agents:
@@ -226,7 +226,7 @@ def plot_prt_slopes(prt_df,rollover = 2):
     g = g.map(plt.plot,"trial","slope")
     g = (g.map(plt.fill_between,"trial", "minus", "plus",alpha = .3).add_legend().set_axis_labels("Trial", "Regression Coefficient between N0 and PRT"))
 
-def mvt_plot(mvt_df,trial_range,agent_type):
+def mvt_plot(mvt_df,trial_range,agent_type,deep = False):
     plt.figure()
     plt.title("Agent Marginal Value Theorem Estimation")
     colors = [(0.5430834294502115, 0.733917723952326, 0.8593156478277586),
@@ -242,9 +242,12 @@ def mvt_plot(mvt_df,trial_range,agent_type):
     if agent_type == "Q":
         plt.plot(x,trials_df["v_patch"],label = "Estimated Patch Value")
     plt.plot(x,trials_df["avgEst"],label = "Estimated Avg Rew")
-
-    rews = np.array(trials_df["rew"]) + .2 # adjust for ITI penalty
+    if deep == False:
+        rews = np.array(trials_df["rew"]) + .2 # adjust for time cost
+    else:
+        rews = np.array(trials_df["rew"]) * 4 + .2
     rew_idx = np.where(rews > 0)[0]
+    # print(mvt_df)
     nonzero_rews = rews[rew_idx]
     color_list = []
     for i in range(len(nonzero_rews)):
@@ -260,3 +263,10 @@ def mvt_plot(mvt_df,trial_range,agent_type):
     timeptArray = np.array(trials_df["timepoint"])
     # use plt.fill_between to signify different patches
     plt.fill_between(np.arange(len(trials_df)*4)/4,-1,4,where = np.repeat(np.roll(timeptArray > 0,-1),4),alpha = .2)
+
+def rpe_plot(interface,agent_type):
+    """
+        throw fully trained agent into a few probe trials to show differences in reward (or rate) prediction errors
+        agent_type is rl or mvt
+    """
+    interface.agent.lr = 0 # no learning!

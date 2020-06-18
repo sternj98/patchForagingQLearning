@@ -78,6 +78,8 @@ class MVT_agentAverager:
         self.avg_list.append(self.avg)
 
 
+
+#### CHANGE THIS TO MONTE CARLO TD (just take out the (1 - instLR)) ####
 class MVT_agentDoubleDelta:
     """
         Class for direct MVT-approximation agents
